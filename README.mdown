@@ -16,11 +16,12 @@ Build Requirements
 ------------------
 * Cocos2D for iPhone v1.x
 * Base SDK of iOS5 (for ARC compilation)
+* Deployment target of iOS4 or higher (zeroing weak references require iOS5)
 
 
 Runtime Requirements
 --------------------
-* iOS 3.2 or newer for iOS games
+* iOS 4.0 or newer for iOS games
 
 
 How to add to your project
