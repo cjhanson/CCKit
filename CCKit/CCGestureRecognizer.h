@@ -35,7 +35,11 @@
 @property(nonatomic, strong, readonly) UIGestureRecognizer* gestureRecognizer;
 
 // The node that this recognizer is watching for input.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
 @property(nonatomic, weak, readonly) CCNode *node;
+#else
+@property(nonatomic, assign, readonly) CCNode *node;
+#endif
 
 
 #pragma mark - Creating the gesture recognizer

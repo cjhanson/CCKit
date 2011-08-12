@@ -143,12 +143,12 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 	else
 		scrollDistance		= ccpMult(scrollDistance, decelerationRate / 2.0f);
 	
-    [self setContentOffset:container.position];
+    [self scrollLayerDidScroll];
     
     if (ccpLengthSQ(scrollDistance) <= SCROLL_DECEL_DIST * SCROLL_DECEL_DIST)
 	{
         [self unschedule:@selector(decelerateScrolling:)];
-        [self relocateContainer:YES];
+		[self setContentOffset:container.position animated:YES];
     }
 }
 
@@ -290,15 +290,36 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 }
 
 
+#pragma mark - Managing scrolling
+
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)aniamted
+{
+	CGPoint centerOfRect = CGPointMake(rect.origin.x + rect.size.width / 2 - viewSize.width / 2, rect.origin.y + rect.size.height / 2 - viewSize.height / 2);
+	[self setContentOffset:centerOfRect animated:YES];
+}
+
+
 #pragma mark - Panning and zooming
 
 - (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated
 {
+    CGPoint oldPoint, min, max;
+    CGFloat newX, newY;
+    
+    min = [self minContainerOffset];
+    max = [self maxContainerOffset];
+    
+    oldPoint = container.position;
+    newX     = MIN(oldPoint.x, max.x);
+    newX     = MAX(newX, min.x);
+    newY     = MIN(oldPoint.y, max.y);
+    newY     = MAX(newY, min.y);
+
     if (animated)	//animate scrolling
 	{
 		[container runAction:
 		 [CCSequence actions:
-		  [CCEaseSineInOut actionWithAction:[CCMoveTo actionWithDuration:BOUNCE_DURATION position:offset]],
+		  [CCEaseSineInOut actionWithAction:[CCMoveTo actionWithDuration:BOUNCE_DURATION position:CGPointMake(newX, newY)]],
 		  [CCCallBlock actionWithBlock:^{
 			 [self unschedule:@selector(performedAnimatedScroll:)];
 			 
@@ -321,7 +342,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
     }
 	else			//set the container position directly
 	{
-        container.position = offset;
+        container.position = CGPointMake(newX, newY);
         [self scrollLayerDidScroll];
     }
 }
@@ -363,7 +384,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 	CGSize deltaSize = CGSizeMake(oldSize.width - newSize.width, oldSize.height - newSize.height);
 	CGPoint pointPercent = CGPointMake(lastGesturePoint.x / container.contentSize.width, lastGesturePoint.y / container.contentSize.height);
 	container.position = ccpAdd(container.position, CGPointMake(deltaSize.width * pointPercent.x, deltaSize.height * pointPercent.y));
-	[self relocateContainer:YES];
+	[self setContentOffset:container.position animated:YES];
 }
 
 
@@ -407,7 +428,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 			container.position = ccpAdd(container.position, moveDistance);
 			scrollDistance = moveDistance;
 			
-            [self setContentOffset:container.position];
+			[self scrollLayerDidScroll];
 			
 			break;
 		}
@@ -415,7 +436,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 		default:
 		{
 			BOOL willDecelerate = NO;
-			if(ccpLengthSQ(scrollDistance) <= SCROLL_DECEL_DIST * SCROLL_DECEL_DIST)
+			if(ccpLengthSQ(scrollDistance) >= SCROLL_DECEL_DIST * SCROLL_DECEL_DIST)
 			{
 				[self schedule:@selector(decelerateScrolling:)];
 				willDecelerate = YES;
@@ -423,6 +444,10 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 				if(delegate != nil
 				   && [delegate respondsToSelector:@selector(scrollLayerWillBeginDecelerating:)])
 					[delegate scrollLayerWillBeginDecelerating:self];
+			}
+			else
+			{
+				[self setContentOffset:container.position animated:YES];
 			}
 			
 			if(delegate != nil

@@ -141,7 +141,10 @@ extern const float CCScrollLayerDecelerationRateFast;
 
 // TODO: @property (nonatomic, assign) BOOL directionalLockEnabled
 // TODO: @property (nonatomic, assign) BOOL scrollsToTop
-// TODO: - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)aniamted;
+
+// Scrolls the layer so that the rectangle specified is visible (if possible).
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)aniamted;
+
 // TODO: @property (nonatomic, assign) BOOL pagingEnabled
 
 // Determines whether the scroll layer bounces when it reaches the edge of its content.
@@ -206,7 +209,11 @@ extern const float CCScrollLayerDecelerationRateFast;
 #pragma mark - Managing the delegate
 
 // The delegate of the scroll layer object.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
 @property (nonatomic, weak) id<CCScrollLayerDelegate> delegate;
+#else
+@property (nonatomic, assign) id<CCScrollLayerDelegate> delegate;
+#endif
 
 
 @end

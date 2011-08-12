@@ -36,7 +36,11 @@
 
 @interface CCGestureRecognizer ()
 
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
 @property (nonatomic, weak) CCNode *node;
+#else
+@property (nonatomic, assign) CCNode *node;
+#endif
 
 @end
 
@@ -46,8 +50,14 @@
 
 @implementation CCGestureRecognizer
 {
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
 	__weak id<UIGestureRecognizerDelegate> delegate;
 	__weak id target;
+#else
+	__unsafe_unretained id<UIGestureRecognizerDelegate> delegate;
+	__unsafe_unretained id target;
+#endif
+	
 	SEL callback;
 }
 
@@ -158,10 +168,20 @@
 }
 
 
+#pragma mark - Cleanup
+
+- (void)dealloc
+{
+	[[[CCDirector sharedDirector] openGLView] removeGestureRecognizer:gestureRecognizer];
+}
+
+
 @end
 
 
 #pragma mark -
+
+static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureRecognizerAdditionsKey";
 
 
 @implementation CCNode (GestureRecognizerAdditions)
@@ -170,14 +190,31 @@
 {
 	gestureRecognizer.node = self;
 	
+	// Since we can't add ivars to categories, we'll use Objective-C's fancy pants associated object feature
+	// which allows us to retain a mutable array of gesture recognizer objects to a CCNode and make sure they
+	// are deallocated when the node is deallocated. Magic!
+	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
+	if(gestureRecognizers == nil)
+	{
+		gestureRecognizers = [[NSMutableArray alloc] init];
+		objc_setAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey, gestureRecognizers, OBJC_ASSOCIATION_RETAIN);
+	}
+	[gestureRecognizers addObject:gestureRecognizer];
+	
 	[[[CCDirector sharedDirector] openGLView] addGestureRecognizer:gestureRecognizer.gestureRecognizer];
 }
 
 
 - (void)removeGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer
 {
+	// Removal of the gesture recognizer from the mutable array created above.
+	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
+	[gestureRecognizers removeObject:gestureRecognizers];
+	
 	if(gestureRecognizer.node == self)
 		[[[CCDirector sharedDirector] openGLView] removeGestureRecognizer:gestureRecognizer.gestureRecognizer]; 
+
+	gestureRecognizer.node = nil;
 }
 
 

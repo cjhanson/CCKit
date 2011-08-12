@@ -54,11 +54,19 @@
 
 #pragma mark - Properties
 
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
+// Data source.
+@property (nonatomic, weak) id<CCTableLayerDataSource> dataSource;
+
+// Delegate.
+@property (nonatomic, weak) id<CCTableLayerDelegate> delegate;
+#else
 // Data source.
 @property (nonatomic, assign) id<CCTableLayerDataSource> dataSource;
 
 // Delegate.
 @property (nonatomic, assign) id<CCTableLayerDelegate> delegate;
+#endif
 
 
 #pragma mark - Creating a table view
