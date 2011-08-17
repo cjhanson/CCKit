@@ -117,10 +117,11 @@
 	{
 		CCNode* n = node;
 		CCNode* parent = node.parent;
-		while( n != nil && rslt)
+		while( n != nil && parent != nil && rslt)
 		{
 			BOOL nodeFound = NO;
-			for(CCNode *child in [parent.children getNSArray])
+			CCNode *child;
+			CCARRAY_FOREACH(parent.children, child)
 			{
 				if( !nodeFound )
 				{
@@ -195,13 +196,13 @@ static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureReco
 	// Since we can't add ivars to categories, we'll use Objective-C's fancy pants associated object feature
 	// which allows us to retain a mutable array of gesture recognizer objects to a CCNode and make sure they
 	// are deallocated when the node is deallocated. Magic!
-	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
-	if(gestureRecognizers == nil)
-	{
-		gestureRecognizers = [[NSMutableArray alloc] init];
-		objc_setAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey, gestureRecognizers, OBJC_ASSOCIATION_RETAIN);
-	}
-	[gestureRecognizers addObject:gestureRecognizer];
+//	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
+//	if(gestureRecognizers == nil)
+//	{
+//		gestureRecognizers = [[NSMutableArray alloc] init];
+//		objc_setAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey, gestureRecognizers, OBJC_ASSOCIATION_RETAIN);
+//	}
+//	[gestureRecognizers addObject:gestureRecognizer];
 	
 	[[[CCDirector sharedDirector] openGLView] addGestureRecognizer:gestureRecognizer.gestureRecognizer];
 }
