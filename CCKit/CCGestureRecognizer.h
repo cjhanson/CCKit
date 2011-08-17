@@ -60,10 +60,24 @@
 // Additions to CCNode to allow better integration with gesture recognizers.
 @interface CCNode (GestureRecognizerAdditions)
 
+#pragma mark - Managing gesture recognizers
+
+// The CCGestureRecognizers currently attached to this node.
+@property (nonatomic, readonly) NSArray *gestureRecognizers;
+
+// Adds a CCGestureRecognizer to this node.
 - (void)addGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer;
+
+// Removes a CCGestureRecognizer to this node.
 - (void)removeGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer;
 
+
+#pragma mark - Utility methods
+
+// Utility method to determine if a touch point is within the bounds of the node.
 - (BOOL)isPointInArea:(CGPoint)pt;
+
+// Utility method to determine if a node in a node tree is touched.
 - (BOOL)isNodeInTreeTouched:(CGPoint)pt;
 
 @end

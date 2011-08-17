@@ -184,6 +184,7 @@
 
 #pragma mark -
 
+
 static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureRecognizerAdditionsKey";
 
 
@@ -245,7 +246,8 @@ static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureReco
 		return YES;
 
 	BOOL rslt = NO;
-	for(CCNode *child in [children_ getNSArray])
+	CCNode *child;
+	CCARRAY_FOREACH(children_, child)
 	{
 		if([child isNodeInTreeTouched:pt])
 		{
