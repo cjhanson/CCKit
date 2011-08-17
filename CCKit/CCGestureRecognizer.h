@@ -26,6 +26,9 @@
 //	THE SOFTWARE.
 //
 
+#import "cocos2d.h"
+
+
 // The interface for Cocos2D gesture recognizer support.
 @interface CCGestureRecognizer : NSObject <UIGestureRecognizerDelegate>
 
