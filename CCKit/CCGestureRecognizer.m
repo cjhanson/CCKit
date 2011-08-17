@@ -213,7 +213,7 @@ static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureReco
 {
 	// Removal of the gesture recognizer from the mutable array created above.
 	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
-	[gestureRecognizers removeObject:gestureRecognizers];
+	[gestureRecognizers removeObject:gestureRecognizer];
 	
 	if(gestureRecognizer.node == self)
 		[[[CCDirector sharedDirector] openGLView] removeGestureRecognizer:gestureRecognizer.gestureRecognizer]; 
