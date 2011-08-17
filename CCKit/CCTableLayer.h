@@ -26,6 +26,7 @@
 //	THE SOFTWARE.
 //
 
+#import "cocos2d.h"
 #import "CCScrollLayer.h"
 
 

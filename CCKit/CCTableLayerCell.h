@@ -26,6 +26,9 @@
 //	THE SOFTWARE.
 //
 
+#import "cocos2d.h"
+
+
 @interface CCTableLayerCell : NSObject
 
 #pragma mark - Properties
