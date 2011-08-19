@@ -185,10 +185,17 @@
 #pragma mark -
 
 
-static const NSString *CCNodeGestureRecognizerAdditionsKey = @"CCNodeGestureRecognizerAdditionsKey";
+static char CCNodeGestureRecognizerAdditionsKey;
 
 
 @implementation CCNode (GestureRecognizerAdditions)
+
+- (NSArray *)gestureRecognizers
+{
+	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
+	return [NSArray arrayWithArray:gestureRecognizers];
+}
+
 
 - (void)addGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer
 {
