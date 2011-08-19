@@ -9,6 +9,7 @@ Main features
 -------------
 * CCScrollLayer - A Cocos2D layer that behaves like a UIScrollView.
 * CCTableLayer - A Cocos2D layer that behaves like a UITableView.
+* CCNavigationController - A Cocos2D layer that allows pushing/popping of nodes on a navigation stack like UINavigationController.
 * CCGestureRecognizer - A wrapper class that allows usage of UIGestureRecognizers on CCNodes.
 
 
