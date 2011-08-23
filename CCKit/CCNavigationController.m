@@ -37,40 +37,59 @@ typedef enum
 
 #pragma mark - Private
 
-- (void)slideAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode<CCRGBAProtocol> *)incomingNode outgoingNode:(CCNode<CCRGBAProtocol> *)outgoingNode
+- (void)slideAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode *)incomingNode outgoingNode:(CCNode *)outgoingNode
 {
 	CGPoint moveByPosition = (direction == CCNavigationControllerAnimationDirectionPush) ? ccp(-kSlideAnimationOffset, 0) : ccp(kSlideAnimationOffset, 0);
 	CGPoint incomingInitialPosition = ccpAdd(incomingNode.position, (direction == CCNavigationControllerAnimationDirectionPush) ? ccp(kSlideAnimationOffset, 0) : ccp(-kSlideAnimationOffset, 0));
 	
 	if(outgoingNode != nil)
 	{
-		CGPoint outgoingPreviousPosition = outgoingNode.position;
+		CCRenderTexture *outgoingTex = [CCRenderTexture renderTextureWithWidth:outgoingNode.contentSize.width height:outgoingNode.contentSize.height];
+		[outgoingTex begin];
+		[outgoingNode visit];
+		[outgoingTex end];
+
+		outgoingTex.position = outgoingNode.position;
+		[outgoingTex.sprite setOpacityModifyRGB:YES];
+		outgoingTex.sprite.opacity = 255;
+
+		[self addChild:outgoingTex];
+		[outgoingNode removeFromParentAndCleanup:(direction == CCNavigationControllerAnimationDirectionPop)];
 		
-		[outgoingNode runAction:
+		[outgoingTex.sprite runAction:
 		 [CCSequence actions:
 		  [CCSpawn actions:
 		   [CCEaseSineInOut actionWithAction:[CCMoveBy actionWithDuration:animationDuration position:moveByPosition]],
 		   [CCFadeTo actionWithDuration:animationDuration opacity:0],
 		   nil],
 		  [CCCallBlock actionWithBlock:^{
-			 if(outgoingNode != incomingNode)
-				 [outgoingNode removeFromParentAndCleanup:(direction == CCNavigationControllerAnimationDirectionPop)];
-			 outgoingNode.position = outgoingPreviousPosition;
+			 [outgoingTex removeFromParentAndCleanup:YES];
 		   }],
 		  nil]
 		 ];
 	}
 	
-	incomingNode.position = incomingInitialPosition;
-	incomingNode.opacity = 0;
+	CCRenderTexture *incomingTex = [CCRenderTexture renderTextureWithWidth:incomingNode.contentSize.width height:incomingNode.contentSize.height];
+	[incomingTex begin];
+	[incomingNode visit];
+	[incomingTex end];
+
+	incomingTex.position = incomingInitialPosition;
+	[incomingTex.sprite setOpacityModifyRGB:YES];
+	incomingTex.sprite.opacity = 0;
 	
-	[incomingNode runAction:
+	[self addChild:incomingTex];
+
+	[incomingTex.sprite runAction:
 	 [CCSequence actions:
 	  [CCSpawn actions:
 	   [CCEaseSineInOut actionWithAction:[CCMoveBy actionWithDuration:animationDuration position:moveByPosition]],
 	   [CCFadeTo actionWithDuration:animationDuration opacity:255],
 	   nil],
 	  [CCCallBlock actionWithBlock:^{
+		 [incomingTex removeFromParentAndCleanup:YES];
+		 [self addChild:incomingNode];
+		 
 		 if(delegate != nil
 			&& [delegate respondsToSelector:@selector(navigationController:didShowNode:animated:)])
 			 [delegate navigationController:self didShowNode:incomingNode animated:YES];
@@ -80,43 +99,64 @@ typedef enum
 }
 
 
-- (void)zoomAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode<CCRGBAProtocol> *)incomingNode outgoingNode:(CCNode<CCRGBAProtocol> *)outgoingNode
+- (void)zoomAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode *)incomingNode outgoingNode:(CCNode *)outgoingNode
 {
-	float scaleToScale = (direction == CCNavigationControllerAnimationDirectionPush) ? kZoomAnimationOffset : -kZoomAnimationOffset;
-	float incomingInitialScale = incomingNode.scale + ((direction == CCNavigationControllerAnimationDirectionPush) ? -kZoomAnimationOffset : kZoomAnimationOffset);
-	
-	outgoingNode.anchorPoint = CGPointZero;
-	incomingNode.anchorPoint = CGPointZero;
+	float outgoingFinalScale = (direction == CCNavigationControllerAnimationDirectionPush) ? 2.0f : 0.5f;
+	float incomingInitialScale = ((direction == CCNavigationControllerAnimationDirectionPush) ? 0.5f : 2.0f);
+	float incomingFinalScale = ((direction == CCNavigationControllerAnimationDirectionPush) ? 2.0f : 0.5f);
 	
 	if(outgoingNode != nil)
 	{
-		float outgoingPreviousScale = outgoingNode.scale;
+		CCRenderTexture *outgoingTex = [CCRenderTexture renderTextureWithWidth:outgoingNode.contentSize.width height:outgoingNode.contentSize.height];
+		[outgoingTex begin];
+		[outgoingNode visit];
+		[outgoingTex end];
 		
-		[outgoingNode runAction:
+		outgoingTex.anchorPoint = CGPointZero;
+		outgoingTex.position = outgoingNode.position;
+		[outgoingTex.sprite setOpacityModifyRGB:YES];
+		outgoingTex.sprite.opacity = 255;
+		
+		[self addChild:outgoingTex];
+		[outgoingNode removeFromParentAndCleanup:(direction == CCNavigationControllerAnimationDirectionPop)];
+		
+		[outgoingTex.sprite runAction:
 		 [CCSequence actions:
 		  [CCSpawn actions:
-		   [CCEaseSineInOut actionWithAction:[CCScaleTo actionWithDuration:animationDuration scale:outgoingNode.scale + scaleToScale]],
+		   [CCEaseSineInOut actionWithAction:[CCScaleTo actionWithDuration:animationDuration scaleX:outgoingFinalScale scaleY:-outgoingFinalScale]],
 		   [CCFadeTo actionWithDuration:animationDuration opacity:0],
 		   nil],
 		  [CCCallBlock actionWithBlock:^{
-			 if(outgoingNode != incomingNode)
-				 [outgoingNode removeFromParentAndCleanup:(direction == CCNavigationControllerAnimationDirectionPop)];
-			 outgoingNode.scale = outgoingPreviousScale;
+			 [outgoingTex removeFromParentAndCleanup:YES];
 		   }],
 		  nil]
 		 ];
 	}
 	
-	incomingNode.scale = incomingInitialScale;
-	incomingNode.opacity = 0;
+	CCRenderTexture *incomingTex = [CCRenderTexture renderTextureWithWidth:incomingNode.contentSize.width height:incomingNode.contentSize.height];
+	[incomingTex begin];
+	[incomingNode visit];
+	[incomingTex end];
+
+	incomingTex.anchorPoint = CGPointZero;
+	incomingTex.position = incomingNode.position;
+	incomingTex.scaleX = incomingInitialScale;
+	incomingTex.scaleY = incomingInitialScale;
+	[incomingTex.sprite setOpacityModifyRGB:YES];
+	incomingTex.sprite.opacity = 0;
 	
-	[incomingNode runAction:
+	[self addChild:incomingTex];
+	
+	[incomingTex.sprite runAction:
 	 [CCSequence actions:
 	  [CCSpawn actions:
-	   [CCEaseSineInOut actionWithAction:[CCScaleTo actionWithDuration:animationDuration scale:1.0f]],
+	   [CCEaseSineInOut actionWithAction:[CCScaleTo actionWithDuration:animationDuration scaleX:incomingFinalScale scaleY:-incomingFinalScale]],
 	   [CCFadeTo actionWithDuration:animationDuration opacity:255],
 	   nil],
 	  [CCCallBlock actionWithBlock:^{
+		 [self addChild:incomingNode];
+		 [incomingTex removeFromParentAndCleanup:YES];
+		 
 		 if(delegate != nil
 			&& [delegate respondsToSelector:@selector(navigationController:didShowNode:animated:)])
 			 [delegate navigationController:self didShowNode:incomingNode animated:YES];
@@ -127,7 +167,7 @@ typedef enum
 }
 
 
-- (void)playTransitionAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode<CCRGBAProtocol> *)incomingNode outgoingNode:(CCNode<CCRGBAProtocol> *)outgoingNode
+- (void)playTransitionAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode *)incomingNode outgoingNode:(CCNode *)outgoingNode
 {
 	switch(animationStyle)
 	{
@@ -150,7 +190,7 @@ typedef enum
 
 #pragma mark - Creating the navigation controller
 
-- (id)initWithRootNode:(CCNode<CCRGBAProtocol> *)node
+- (id)initWithRootNode:(CCNode *)node
 {
 	if((self = [super init]))
 	{
@@ -168,7 +208,7 @@ typedef enum
 
 #pragma mark - Accessing items on the navigation stack
 
-- (CCNode<CCRGBAProtocol> *)topNode
+- (CCNode *)topNode
 {
 	return [nodeStack lastObject];
 }
@@ -188,16 +228,14 @@ typedef enum
 
 - (void)setNodes:(NSArray *)nodes animated:(BOOL)animated
 {
-	CCNode<CCRGBAProtocol> *oldTop = self.topNode;
-	CCNode<CCRGBAProtocol> *newTop = [nodes lastObject];
+	CCNode *oldTop = self.topNode;
+	CCNode *newTop = [nodes lastObject];
 	
 	if(delegate != nil
 	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 		[delegate navigationController:self willShowNode:newTop animated:animated];
 
 	self.nodes = nodes;
-	[self addChild:newTop];
-	newTop.opacity = 255;
 	
 	if(animated)
 	{
@@ -207,6 +245,9 @@ typedef enum
 	else
 	{
 		[oldTop removeFromParentAndCleanup:YES];
+		[self addChild:newTop];
+		newTop.opacity = 255;
+
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 			[delegate navigationController:self willShowNode:newTop animated:NO];
@@ -216,18 +257,16 @@ typedef enum
 
 #pragma mark - Pushing and popping stack items
 
-- (void)pushNode:(CCNode<CCRGBAProtocol> *)node animated:(BOOL)animated
+- (void)pushNode:(CCNode *)node animated:(BOOL)animated
 {
-	CCNode<CCRGBAProtocol> *oldTop = self.topNode;
-	CCNode<CCRGBAProtocol> *newTop = node;
+	CCNode *oldTop = self.topNode;
+	CCNode *newTop = node;
 	
 	if(delegate != nil
 	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 		[delegate navigationController:self willShowNode:newTop animated:animated];
 	
 	[nodeStack addObject:newTop];
-	[self addChild:node];
-	node.opacity = 255;
 	
 	if(animated)
 	{
@@ -237,6 +276,8 @@ typedef enum
 	{
 		if(oldTop != nil)
 			[oldTop removeFromParentAndCleanup:NO];
+
+		[self addChild:node];
 
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
@@ -250,17 +291,14 @@ typedef enum
 	if([nodeStack count] <= 1)
 		return nil;
 	
-	CCNode<CCRGBAProtocol> *oldTop = self.topNode;
+	CCNode *oldTop = self.topNode;
 	[nodeStack removeLastObject];
-	CCNode<CCRGBAProtocol> *newTop = self.topNode;
+	CCNode *newTop = self.topNode;
 	
 	if(delegate != nil
 	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 		[delegate navigationController:self willShowNode:newTop animated:animated];
 	
-	[self addChild:newTop];
-	newTop.opacity = 255;
-
 	if(animated)
 	{
 		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPop incomingNode:newTop outgoingNode:oldTop];
@@ -269,6 +307,8 @@ typedef enum
 	{
 		if(oldTop != nil)
 			[oldTop removeFromParentAndCleanup:YES];
+		
+		[self addChild:newTop];
 		
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
@@ -281,8 +321,8 @@ typedef enum
 
 - (NSArray *)popToRootAnimated:(BOOL)animated
 {
-	CCNode<CCRGBAProtocol> *oldTop = self.topNode;
-	CCNode<CCRGBAProtocol> *newTop = [nodeStack objectAtIndex:0];
+	CCNode *oldTop = self.topNode;
+	CCNode *newTop = [nodeStack objectAtIndex:0];
 	
 	if(oldTop == newTop)
 		return nil;
@@ -291,9 +331,6 @@ typedef enum
 	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 		[delegate navigationController:self willShowNode:newTop animated:animated];
 	
-	[self addChild:newTop];
-	newTop.opacity = 255;
-
 	NSMutableArray *oldArray = nodeStack;
 	[oldArray removeObjectAtIndex:0];
 	
@@ -308,6 +345,8 @@ typedef enum
 		if(oldTop != nil)
 			[oldTop removeFromParentAndCleanup:YES];
 		
+		[self addChild:newTop];
+		
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 			[delegate navigationController:self willShowNode:newTop animated:NO];
@@ -317,7 +356,7 @@ typedef enum
 }
 
 
-- (NSArray *)popToNode:(CCNode<CCRGBAProtocol> *)node animated:(BOOL)animated
+- (NSArray *)popToNode:(CCNode *)node animated:(BOOL)animated
 {
 	if(![nodeStack containsObject:node]
 	   || [nodeStack count] <= 1)
@@ -326,8 +365,8 @@ typedef enum
 	NSInteger oldTopIndex = [nodeStack indexOfObject:node];
 	NSInteger newTopIndex = oldTopIndex - 1;
 	
-	CCNode<CCRGBAProtocol> *oldTop = node;
-	CCNode<CCRGBAProtocol> *newTop = [nodeStack objectAtIndex:newTopIndex];
+	CCNode *oldTop = node;
+	CCNode *newTop = [nodeStack objectAtIndex:newTopIndex];
 	
 	if(oldTop == newTop)
 		return nil;
@@ -336,9 +375,6 @@ typedef enum
 	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 		[delegate navigationController:self willShowNode:newTop animated:animated];
 	
-	[self addChild:newTop];
-	newTop.opacity = 255;
-
 	NSRange range = { oldTopIndex, [nodeStack count] - oldTopIndex };
 	NSArray *removedArray = [nodeStack subarrayWithRange:range];
 	[nodeStack removeObjectsInRange:range];
@@ -351,6 +387,8 @@ typedef enum
 	{
 		if(oldTop != nil)
 			[oldTop removeFromParentAndCleanup:YES];
+		
+		[self addChild:newTop];
 		
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
