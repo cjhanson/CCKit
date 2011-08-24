@@ -246,7 +246,6 @@ typedef enum
 	{
 		[oldTop removeFromParentAndCleanup:YES];
 		[self addChild:newTop];
-		newTop.opacity = 255;
 
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
