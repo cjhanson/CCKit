@@ -169,6 +169,10 @@ typedef enum
 
 - (void)playTransitionAnimationWithDirection:(CCNavigationControllerAnimationDirection)direction incomingNode:(CCNode *)incomingNode outgoingNode:(CCNode *)outgoingNode
 {
+	if(delegate != nil
+	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
+		[delegate navigationController:self willShowNode:incomingNode animated:YES];
+	
 	switch(animationStyle)
 	{
 		case CCNavigationControllerAnimationStyleSlide:
@@ -222,7 +226,7 @@ typedef enum
 
 - (void)setNodes:(NSArray *)nodes
 {
-	nodeStack = [NSMutableArray arrayWithArray:nodes];
+	[self setNodes:nodes animated:NO];
 }
 
 
@@ -231,25 +235,32 @@ typedef enum
 	CCNode *oldTop = self.topNode;
 	CCNode *newTop = [nodes lastObject];
 	
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-		[delegate navigationController:self willShowNode:newTop animated:animated];
-
-	self.nodes = nodes;
+	// Determine the proper direction of the transition.
+	CCNavigationControllerAnimationDirection animationDirection = CCNavigationControllerAnimationDirectionPush;
+	if(animated
+	   && [nodeStack containsObject:newTop])
+		animationDirection = CCNavigationControllerAnimationDirectionPop;
+	
+	nodeStack = [NSMutableArray arrayWithArray:nodes];
 	
 	if(animated)
 	{
-		// TODO: Determine the proper direction of the transition.
-		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPush incomingNode:newTop outgoingNode:oldTop];
+		[self playTransitionAnimationWithDirection:animationDirection incomingNode:newTop outgoingNode:oldTop];
 	}
 	else
 	{
-		[oldTop removeFromParentAndCleanup:YES];
+		if(delegate != nil
+		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
+			[delegate navigationController:self willShowNode:newTop animated:animated];
+		
+		if(oldTop != nil)
+			[oldTop removeFromParentAndCleanup:![nodeStack containsObject:oldTop]];
+		
 		[self addChild:newTop];
 
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-			[delegate navigationController:self willShowNode:newTop animated:NO];
+			[delegate navigationController:self didShowNode:newTop animated:NO];
 	}
 }
 
@@ -261,27 +272,12 @@ typedef enum
 	CCNode *oldTop = self.topNode;
 	CCNode *newTop = node;
 	
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-		[delegate navigationController:self willShowNode:newTop animated:animated];
-	
 	[nodeStack addObject:newTop];
 	
 	if(animated)
-	{
 		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPush incomingNode:newTop outgoingNode:oldTop];
-	}
 	else
-	{
-		if(oldTop != nil)
-			[oldTop removeFromParentAndCleanup:NO];
-
-		[self addChild:node];
-
-		if(delegate != nil
-		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-			[delegate navigationController:self willShowNode:newTop animated:NO];
-	}
+		self.nodes = nodeStack;
 }
 
 
@@ -294,25 +290,10 @@ typedef enum
 	[nodeStack removeLastObject];
 	CCNode *newTop = self.topNode;
 	
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-		[delegate navigationController:self willShowNode:newTop animated:animated];
-	
 	if(animated)
-	{
 		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPop incomingNode:newTop outgoingNode:oldTop];
-	}
 	else
-	{
-		if(oldTop != nil)
-			[oldTop removeFromParentAndCleanup:YES];
-		
-		[self addChild:newTop];
-		
-		if(delegate != nil
-		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-			[delegate navigationController:self willShowNode:newTop animated:NO];
-	}
+		self.nodes = nodeStack;
 	
 	return oldTop;
 }
@@ -326,30 +307,15 @@ typedef enum
 	if(oldTop == newTop)
 		return nil;
 	
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-		[delegate navigationController:self willShowNode:newTop animated:animated];
-	
 	NSMutableArray *oldArray = nodeStack;
 	[oldArray removeObjectAtIndex:0];
 	
 	nodeStack = [NSMutableArray arrayWithObject:newTop];
 	
 	if(animated)
-	{
 		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPop incomingNode:newTop outgoingNode:oldTop];
-	}
 	else
-	{
-		if(oldTop != nil)
-			[oldTop removeFromParentAndCleanup:YES];
-		
-		[self addChild:newTop];
-		
-		if(delegate != nil
-		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-			[delegate navigationController:self willShowNode:newTop animated:NO];
-	}
+		self.nodes = nodeStack;
 	
 	return [NSArray arrayWithArray:oldArray];
 }
@@ -370,29 +336,14 @@ typedef enum
 	if(oldTop == newTop)
 		return nil;
 	
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-		[delegate navigationController:self willShowNode:newTop animated:animated];
-	
 	NSRange range = { oldTopIndex, [nodeStack count] - oldTopIndex };
 	NSArray *removedArray = [nodeStack subarrayWithRange:range];
 	[nodeStack removeObjectsInRange:range];
 	
 	if(animated)
-	{
 		[self playTransitionAnimationWithDirection:CCNavigationControllerAnimationDirectionPop incomingNode:newTop outgoingNode:oldTop];
-	}
 	else
-	{
-		if(oldTop != nil)
-			[oldTop removeFromParentAndCleanup:YES];
-		
-		[self addChild:newTop];
-		
-		if(delegate != nil
-		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
-			[delegate navigationController:self willShowNode:newTop animated:NO];
-	}
+		self.nodes = nodeStack;
 	
 	return removedArray;
 }
