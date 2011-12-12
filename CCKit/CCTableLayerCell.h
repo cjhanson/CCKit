@@ -40,7 +40,7 @@
 @property (nonatomic, assign) NSUInteger idx;
 
 
-#pragma Cell appearance
+#pragma mark - Cell appearance
 
 // Override this! otherwise, cells won't be aligned properly.
 + (CGSize)cellSize;
