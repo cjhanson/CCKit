@@ -14,8 +14,6 @@
 // Enumeration for the styles of animation the navigation controller supports.
 typedef enum
 {
-	CCNavigationControllerAnimationStyleNone,
-	
 	CCNavigationControllerAnimationStyleSlide,
 	CCNavigationControllerAnimationStyleZoom,
 	
