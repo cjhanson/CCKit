@@ -48,11 +48,13 @@ typedef enum
 		[outgoingTex begin];
 		[outgoingNode visit];
 		[outgoingTex end];
-
+		
+		outgoingTex.anchorPoint = outgoingNode.anchorPoint;
 		outgoingTex.position = outgoingNode.position;
+		outgoingTex.sprite.positionInPixels = outgoingNode.anchorPointInPixels;
 		[outgoingTex.sprite setOpacityModifyRGB:YES];
 		outgoingTex.sprite.opacity = 255;
-
+		
 		[self addChild:outgoingTex];
 		[outgoingNode removeFromParentAndCleanup:(direction == CCNavigationControllerAnimationDirectionPop)];
 		
@@ -64,7 +66,7 @@ typedef enum
 		   nil],
 		  [CCCallBlock actionWithBlock:^{
 			 [outgoingTex removeFromParentAndCleanup:YES];
-		   }],
+		 }],
 		  nil]
 		 ];
 	}
@@ -73,13 +75,15 @@ typedef enum
 	[incomingTex begin];
 	[incomingNode visit];
 	[incomingTex end];
-
+	
+	incomingTex.anchorPoint = incomingNode.anchorPoint;
 	incomingTex.position = incomingInitialPosition;
+	incomingTex.sprite.positionInPixels = incomingNode.anchorPointInPixels;
 	[incomingTex.sprite setOpacityModifyRGB:YES];
 	incomingTex.sprite.opacity = 0;
 	
 	[self addChild:incomingTex];
-
+	
 	[incomingTex.sprite runAction:
 	 [CCSequence actions:
 	  [CCSpawn actions:
@@ -93,7 +97,7 @@ typedef enum
 		 if(delegate != nil
 			&& [delegate respondsToSelector:@selector(navigationController:didShowNode:animated:)])
 			 [delegate navigationController:self didShowNode:incomingNode animated:YES];
-	   }],
+	 }],
 	  nil]
 	 ];
 }
@@ -128,7 +132,7 @@ typedef enum
 		   nil],
 		  [CCCallBlock actionWithBlock:^{
 			 [outgoingTex removeFromParentAndCleanup:YES];
-		   }],
+		 }],
 		  nil]
 		 ];
 	}
@@ -137,7 +141,7 @@ typedef enum
 	[incomingTex begin];
 	[incomingNode visit];
 	[incomingTex end];
-
+	
 	incomingTex.anchorPoint = CGPointZero;
 	incomingTex.position = incomingNode.position;
 	incomingTex.scaleX = incomingInitialScale;
@@ -160,7 +164,7 @@ typedef enum
 		 if(delegate != nil
 			&& [delegate respondsToSelector:@selector(navigationController:didShowNode:animated:)])
 			 [delegate navigationController:self didShowNode:incomingNode animated:YES];
-	   }],
+	 }],
 	  nil
 	  ]
 	 ];
@@ -182,7 +186,7 @@ typedef enum
 		case CCNavigationControllerAnimationStyleZoom:
 			[self zoomAnimationWithDirection:direction incomingNode:incomingNode outgoingNode:outgoingNode];
 			break;
-
+			
 		default:
 			if(delegate != nil
 			   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
@@ -257,7 +261,7 @@ typedef enum
 			[oldTop removeFromParentAndCleanup:![nodeStack containsObject:oldTop]];
 		
 		[self addChild:newTop];
-
+		
 		if(delegate != nil
 		   && [delegate respondsToSelector:@selector(navigationController:willShowNode:animated:)])
 			[delegate navigationController:self didShowNode:newTop animated:NO];
