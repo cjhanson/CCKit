@@ -310,10 +310,13 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
     max = [self maxContainerOffset];
     
     oldPoint = container.position;
-    newX     = MIN(oldPoint.x, max.x);
+    newX     = MIN(offset.x, max.x);
     newX     = MAX(newX, min.x);
-    newY     = MIN(oldPoint.y, max.y);
+    newY     = MIN(offset.y, max.y);
     newY     = MAX(newY, min.y);
+
+    if (newY == oldPoint.y && newX == oldPoint.x)
+        return;
 
     if (animated)	//animate scrolling
 	{
