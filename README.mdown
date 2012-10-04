@@ -10,15 +10,11 @@ Main features
 * CCScrollLayer - A Cocos2D layer that behaves like a UIScrollView.
 * CCTableLayer - A Cocos2D layer that behaves like a UITableView.
 * CCNavigationController - A Cocos2D layer that allows pushing/popping of nodes on a navigation stack like UINavigationController.
-* CCGestureRecognizer - A wrapper class that allows usage of UIGestureRecognizers on CCNodes.
 
 
 Build Requirements
 ------------------
-* Cocos2D for iPhone v1.x
-* Base SDK of iOS5 (for ARC compilation)
-* Deployment target of iOS4 or higher (zeroing weak references require iOS5)
-
+* Cocos2D for iPhone v2.x
 
 Runtime Requirements
 --------------------
@@ -39,7 +35,7 @@ Attributions
 ------------------------
 * Portions of CCScrollLayer, CCTableLayer, and CCTableLayerCell created by Sangwoo Im.
 * Portions of CCGestureRecognizer created by Joe Allen, Glaivare LLC.
-
+* Portions by CJ Hanson @ Hanson Interactive
 
 License
 ------------------------
