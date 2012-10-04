@@ -35,14 +35,10 @@
 #pragma mark - Properties
 
 // The gesture recognizer itself.
-@property(nonatomic, strong, readonly) UIGestureRecognizer* gestureRecognizer;
+@property(nonatomic, retain, readonly) UIGestureRecognizer* gestureRecognizer;
 
 // The node that this recognizer is watching for input.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
-@property(nonatomic, weak, readonly) CCNode *node;
-#else
 @property(nonatomic, assign, readonly) CCNode *node;
-#endif
 
 
 #pragma mark - Creating the gesture recognizer
@@ -59,18 +55,6 @@
 
 // Additions to CCNode to allow better integration with gesture recognizers.
 @interface CCNode (GestureRecognizerAdditions)
-
-#pragma mark - Managing gesture recognizers
-
-// The CCGestureRecognizers currently attached to this node.
-@property (nonatomic, readonly) NSArray *gestureRecognizers;
-
-// Adds a CCGestureRecognizer to this node.
-- (void)addGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer;
-
-// Removes a CCGestureRecognizer to this node.
-- (void)removeGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer;
-
 
 #pragma mark - Utility methods
 

@@ -7,6 +7,8 @@
 //
 //  Portions created by Sangwoo Im.
 //
+//  Modified by CJ Hanson @ Hanson Interactive.
+//
 //	Permission is hereby granted, free of charge, to any person obtaining a copy
 //	of this software and associated documentation files (the "Software"), to deal
 //	in the Software without restriction, including without limitation the rights
@@ -27,25 +29,33 @@
 //
 
 #import "CCScrollLayer.h"
+#import "DeviceConfiguration.h"
 
+//This sets how slowly the thing is sliding when we say it's close enough to stopped. (and animate it into a valid position)
+//The value is in points per second squared (49 is basically 7 pps (squared))
+//A bigger value will make it feel stickier and a smaller one will let it slide more but will also go very slowly for some time before it thinks it should stop
+#define SCROLL_STOP_VELOCITY  (kUserInterfacePad?200.0f:120.0f)
 
-#if __has_feature(objc_arc) == 0
-#warning This code was designed to run under ARC. Without it, you will experience lots of memory leaks.
-#endif
+//This is a cap on the individual x and y speed in points per second
+//It applies after releasing the view and letting it slide to a stop
+//It also factors into the duration of the Move animation for paging.
+//In that case bigger values will cause it to snap into place faster
+#define SCROLL_MAX_VELOCITY   (kUserInterfacePad?500.0f:300.0f)
 
+//This is the distance you can drag the view beyond the ends in points
+#define OVERSHOOT_DISTANCE    (kUserInterfacePad?80.0f:50.0f)
 
-#define SCROLL_DECEL_DIST			1.0f
-#define BOUNCE_DURATION				0.25f
+//This is used for Zoom (which is untested anyway)
+#define BOUNCE_DURATION				0.20f
 
-
-const float CCScrollLayerDecelerationRateNormal = 0.95f;
-const float CCScrollLayerDecelerationRateFast = 0.85f;
+const float CCScrollLayerDecelerationRateNormal = 0.96f;
+const float CCScrollLayerDecelerationRateFast = 0.86f;
 
 
 
 @interface CCScrollLayer ()
 
-@property (nonatomic, strong) CCLayer *container;
+@property (nonatomic, retain) CCLayer *container;
 
 - (void)scrollLayerDidScroll;
 
@@ -57,11 +67,12 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 
 @implementation CCScrollLayer
 {
-	CGPoint lastGesturePoint;
-    CGPoint scrollDistance;
-	
-	CCGestureRecognizer *ccPanGestureRecognizer;
-	CCGestureRecognizer *ccPinchGestureRecognizer;
+  NSTimeInterval lastGestureTime;
+  CGPoint lastGesturePoint;
+  NSTimeInterval totalGestureTime;
+  CGPoint totalGestureDistance;
+  CGPoint scrollVelocity;
+  BOOL isAnimating;
 }
 
 @synthesize scrollEnabled;
@@ -79,119 +90,209 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 @synthesize zoomBouncing;
 @synthesize delegate;
 @synthesize container;
+@synthesize pagingEnabled;
+@synthesize panGestureRecognizer;
+@synthesize pinchGestureRecognizer;
 
 @dynamic contentOffset;
+
+- (void) dealloc
+{
+  [container release];
+  [panGestureRecognizer release];
+  [pinchGestureRecognizer release];
+  [super dealloc];
+}
 
 
 #pragma mark - Private
 
-- (CGPoint)maxContainerOffset
+- (CGPoint)maxContainerOffsetWithOvershot:(CGPoint)overshot
 {
-    return ccp(0.0f, 0.0f);
+  CGPoint offset = ccpAdd(CGPointZero, overshot);
+  
+  if(direction == CCScrollLayerDirectionHorizontal)
+    offset.y = 0;
+  
+  if(direction == CCScrollLayerDirectionVertical)
+    offset.x = 0;
+  
+  return offset;
 }
 
-
-- (CGPoint)minContainerOffset
+- (CGPoint)minContainerOffsetWithOvershot:(CGPoint)overshot
 {
-    return ccp(viewSize.width - self.contentSize.width, viewSize.height - self.contentSize.height);
+  CGPoint offset = ccp(viewSize.width - self.contentSize.width, viewSize.height - self.contentSize.height);
+  
+  offset = ccpSub(offset, overshot);
+  
+  if(direction == CCScrollLayerDirectionHorizontal)
+    offset.y = 0;
+  
+  if(direction == CCScrollLayerDirectionVertical)
+    offset.x = 0;
+  
+  return offset;
 }
 
-
-- (void)relocateContainer:(BOOL)animated
+- (CGPoint) clampedPosition:(CGPoint)targetPos withOvershot:(CGPoint)overshot
 {
-    CGPoint oldPoint, min, max;
-    CGFloat newX, newY;
+  CGPoint maxInset    = [self maxContainerOffsetWithOvershot:overshot];
+  CGPoint minInset    = [self minContainerOffsetWithOvershot:overshot];
+  
+  CGPoint clampPos    = targetPos;
+  clampPos.x          = clampf(clampPos.x, maxInset.x, minInset.x);
+  clampPos.y          = clampf(clampPos.y, maxInset.y, minInset.y);
+  
+  return clampPos;
+}
+
+- (void) update:(ccTime)delta
+{
+  BOOL shouldSendDidScroll = NO;
+  
+  if(!self.dragging && !self.zooming && decelerating && !isAnimating){
+    scrollVelocity      = ccpMult(scrollVelocity, decelerationRate);
+    CGPoint pVelocity   = ccpMult(scrollVelocity, delta);
+    pVelocity.x         = clampf(pVelocity.x, -SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
+    pVelocity.y         = clampf(pVelocity.y, -SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
     
-    min = [self minContainerOffset];
-    max = [self maxContainerOffset];
+    CGPoint newPos      = ccpAdd(container.position, pVelocity);
     
-    oldPoint = container.position;
-    newX     = MIN(oldPoint.x, max.x);
-    newX     = MAX(newX, min.x);
-    newY     = MIN(oldPoint.y, max.y);
-    newY     = MAX(newY, min.y);
-    if (newY != oldPoint.y || newX != oldPoint.x)
-	{
-        [self setContentOffset:ccp(newX, newY) animated:animated];
+    CGPoint overshot    = (bounces)?ccp(OVERSHOOT_DISTANCE, OVERSHOOT_DISTANCE):CGPointZero;
+    CGPoint clampPos    = [self clampedPosition:newPos withOvershot:overshot];
+    
+    container.position  = clampPos;
+    
+    shouldSendDidScroll = YES;
+    
+    BOOL isOutOfBounds  = NO;
+    CGPoint moveTo      = CGPointZero;
+    CGPoint maxInset    = [self maxContainerOffsetWithOvershot:CGPointZero];
+    CGPoint minInset    = [self minContainerOffsetWithOvershot:CGPointZero];
+    
+    if(container.position.x > maxInset.x){
+      isOutOfBounds = YES;
+      moveTo.x = maxInset.x;
     }
-}
-
-
-- (void)decelerateScrolling:(ccTime)dt
-{
-    if(self.dragging)
-	{
-		decelerating = NO;
-        [self unschedule:@selector(decelerateScrolling:)];
-        return;
+    
+    if(container.position.x < minInset.x){
+      isOutOfBounds = YES;
+      moveTo.x = minInset.x;
     }
-	
-	decelerating = YES;
     
-    CGPoint maxInset, minInset;
+    if(container.position.y > maxInset.y){
+      isOutOfBounds = YES;
+      moveTo.y = maxInset.y;
+    }
     
-    container.position = ccpAdd(container.position, scrollDistance);
-
-    maxInset = [self maxContainerOffset];
-    minInset = [self minContainerOffset];
+    if(container.position.y < minInset.y){
+      isOutOfBounds = YES;
+      moveTo.y = minInset.y;
+    }
     
-	if(container.position.x >= minInset.x
-	   && container.position.y >= minInset.y
-	   && container.position.x < maxInset.x
-	   && container.position.y < maxInset.y)
-		scrollDistance     = ccpMult(scrollDistance, decelerationRate);
-	else
-		scrollDistance		= ccpMult(scrollDistance, decelerationRate / 2.0f);
-	
+    float pageF = 0;
+    
+    if(isOutOfBounds){
+      scrollVelocity = ccpMult(scrollVelocity, 0.1f);
+    }else if(pagingEnabled){
+      //when it gets close to a page boundary add more friction
+      if(direction == CCScrollLayerDirectionHorizontal)
+        pageF = fabsf((container.position.x - viewSize.width/2.0)/viewSize.width);
+      else
+        pageF = fabsf((container.position.y - viewSize.height/2.0)/viewSize.height);
+      
+      float pageN;
+      float distToPage = modff(pageF, &pageN);
+      if(distToPage > 0.2f && distToPage < 0.8f)
+        scrollVelocity = ccpMult(scrollVelocity, 0.2f);
+    }
+    
+    if(ccpLengthSQ(scrollVelocity) < SCROLL_STOP_VELOCITY){
+      if(isOutOfBounds){
+        [self setContentOffset:moveTo animated:YES];
+      }else if(pagingEnabled){
+        int pageCount = self.pageCount;
+        int page = (int)pageF;
+        page = MAX(0, MIN(pageCount-1, page));
+        [self scrollToPage:page animated:YES];
+      }else{
+        shouldSendDidScroll = NO;
+        [self stoppedDecelerating:nil];
+      }
+		}
+  }
+  
+  if(isAnimating)
+    shouldSendDidScroll = YES;
+  
+  if(shouldSendDidScroll)
     [self scrollLayerDidScroll];
-    
-    if (ccpLengthSQ(scrollDistance) <= SCROLL_DECEL_DIST * SCROLL_DECEL_DIST)
-	{
-        [self unschedule:@selector(decelerateScrolling:)];
-		[self setContentOffset:container.position animated:YES];
-    }
 }
 
+- (void) stoppedDecelerating:(id)sender
+{
+  [self scrollLayerDidScroll];
+  
+  if([delegate respondsToSelector:@selector(scrollLayerDidEndDecelerating:)])
+    [delegate scrollLayerDidEndDecelerating:self];
+  
+  scrollVelocity = CGPointZero;
+  decelerating = NO;
+  isAnimating = NO;
+}
 
 - (void)scrollLayerDidScroll
 {
-	if(delegate != nil
-	   && [delegate respondsToSelector:@selector(scrollLayerDidScroll:)])
+	if([delegate respondsToSelector:@selector(scrollLayerDidScroll:)])
 		[delegate scrollLayerDidScroll:self];
 }
 
+#pragma mark - Properties
 
-- (void)performedAnimatedScroll:(ccTime)dt
+- (int) pageCount
 {
-    if(self.dragging
-	   || self.zooming)
-	{
-		[self unschedule:@selector(performedAnimatedScroll:)];
-        return;
-    }
-	
-    [self scrollLayerDidScroll];
+  if(direction == CCScrollLayerDirectionHorizontal)
+    return container.contentSize.width / viewSize.width;
+  else
+    return container.contentSize.height / viewSize.height;
 }
 
+- (int) currentPage
+{
+  int pageCount = self.pageCount;
+  int page = 0;
+  if(direction == CCScrollLayerDirectionHorizontal)
+    page = fabsf((container.position.x - viewSize.width/2.0)/viewSize.width);
+  else
+    page = fabsf((container.position.y - viewSize.height/2.0)/viewSize.height);
+  
+  page = MAX(0, MIN(pageCount-1, page));
+  
+  return page;
+}
 
-#pragma mark - Properties
+- (void) setCurrentPage:(int)page
+{
+  [self scrollToPage:page animated:NO];
+}
 
 - (void)setScrollEnabled:(BOOL)se
 {
-	ccPanGestureRecognizer.gestureRecognizer.enabled = se;
-	ccPinchGestureRecognizer.gestureRecognizer.enabled = se;
+	panGestureRecognizer.enabled = se;
+	pinchGestureRecognizer.enabled = se;
 }
 
 
 - (BOOL)dragging
 {
-	return (ccPanGestureRecognizer.gestureRecognizer.state == UIGestureRecognizerStateChanged);
+	return (panGestureRecognizer.state == UIGestureRecognizerStateChanged);
 }
 
 
 - (BOOL)zooming
 {
-	return (ccPinchGestureRecognizer.gestureRecognizer.state == UIGestureRecognizerStateChanged);
+	return (pinchGestureRecognizer.state == UIGestureRecognizerStateChanged);
 }
 
 
@@ -218,54 +319,51 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 	return container.scale;
 }
 
-
-- (UIPanGestureRecognizer *)panGestureRecognizer
-{
-	return (UIPanGestureRecognizer *)ccPanGestureRecognizer.gestureRecognizer;
-}
-
-
-- (UIPinchGestureRecognizer *)pinchGestureRecognizer
-{
-	return (UIPinchGestureRecognizer *)ccPinchGestureRecognizer.gestureRecognizer;
-}
-
-
 #pragma mark - Creating a scroll view
 
 + (id)scrollLayerWithViewSize:(CGSize)size
 {
-    return [[CCScrollLayer alloc] initWithViewSize:size];
+    return [[[CCScrollLayer alloc] initWithViewSize:size] autorelease];
 }
 
 
 - (id)initWithViewSize:(CGSize)size
 {
-    if ((self = [super init]))
-	{
-        viewSize = size;
-        bounces = YES;
-		decelerationRate = CCScrollLayerDecelerationRateNormal;
-        clipToBounds = YES;
-        direction = CCScrollLayerDirectionBoth;
-		minimumZoom = 1.0f;
-		maximumZoom = 1.0f;
+  self = [super init];
+  
+  if(self){
+    viewSize = size;
+    bounces = YES;
+    decelerationRate = CCScrollLayerDecelerationRateNormal;
+    clipToBounds = YES;
+    pagingEnabled = NO;
+    direction = CCScrollLayerDirectionBoth;
+    minimumZoom = 1.0f;
+    maximumZoom = 1.0f;
 
-        container = [CCLayer node];
-        container.contentSize = CGSizeZero;
-        container.position = ccp(0.0f, 0.0f);
-        [self addChild:container];
-    }
-	
-    return self;
+    panGestureRecognizer  = [[UIPanGestureRecognizer alloc] init];
+    panGestureRecognizer.delaysTouchesBegan = YES;
+    panGestureRecognizer.delegate = self;
+    [panGestureRecognizer addTarget:self action:@selector(handlePanGesture:)];
+
+    pinchGestureRecognizer  = [[UIPinchGestureRecognizer alloc] init];
+    pinchGestureRecognizer.delegate = self;
+    [pinchGestureRecognizer addTarget:self action:@selector(handlePinchGesture:)];
+
+    container = [[CCLayer alloc] init];
+    container.contentSize = CGSizeZero;
+    container.position = ccp(0.0f, 0.0f);
+    [self addChild:container];
+  }
+
+  return self;
 }
 
 
 - (id)init
 {
-    self = [self initWithViewSize:[[CCDirector sharedDirector] winSize]];
-	
-	return self;
+  self = [self initWithViewSize:[[CCDirector sharedDirector] winSize]];
+  return self;
 }
 
 
@@ -273,81 +371,93 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 
 - (void)onEnterTransitionDidFinish
 {
-	UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] init];
-	ccPanGestureRecognizer = [CCGestureRecognizer recognizerWithRecognizer:pan target:self action:@selector(handlePanGesture:)];
-	[self addGestureRecognizer:ccPanGestureRecognizer];
-	
-	UIPinchGestureRecognizer *pinch = [[UIPinchGestureRecognizer alloc] init];
-	ccPinchGestureRecognizer = [CCGestureRecognizer recognizerWithRecognizer:pinch target:self action:@selector(handlePinchGesture:)];
-	[self addGestureRecognizer:ccPinchGestureRecognizer];	
+  [super onEnterTransitionDidFinish];
+  
+	[self addGestureRecognizer:panGestureRecognizer];
+	[self addGestureRecognizer:pinchGestureRecognizer];
+  
+  [self scheduleUpdate];
 }
-
 
 - (void)onExit
 {
-	[self removeGestureRecognizer:ccPanGestureRecognizer];
-	[self removeGestureRecognizer:ccPinchGestureRecognizer];
+  [super onExit];
+  
+	[self removeGestureRecognizer:panGestureRecognizer];
+	[self removeGestureRecognizer:pinchGestureRecognizer];
+  
+  [self unscheduleUpdate];
+}
+
+- (void)addGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+{
+	[[CCDirector sharedDirector].view addGestureRecognizer:gestureRecognizer];
+}
+
+- (void)removeGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+{
+  [[CCDirector sharedDirector].view removeGestureRecognizer:gestureRecognizer];
 }
 
 
 #pragma mark - Managing scrolling
 
-- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)aniamted
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated
 {
 	CGPoint centerOfRect = CGPointMake(rect.origin.x + rect.size.width / 2 - viewSize.width / 2, rect.origin.y + rect.size.height / 2 - viewSize.height / 2);
-	[self setContentOffset:centerOfRect animated:YES];
+	[self setContentOffset:centerOfRect animated:animated];
 }
 
+-(void)scrollToPage:(int)page animated:(BOOL)animated
+{
+  int pageCount = self.pageCount;
+  page = MAX(0, MIN(pageCount-1, page));
+  
+  NSLog(@"Scroll to page %d of %d", page+1, pageCount);
+  
+  CGPoint pos = ccp(-(viewSize.width * page), container.position.y);
+  
+  [self setContentOffset:pos animated:animated];
+}
 
 #pragma mark - Panning and zooming
 
 - (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated
 {
-    CGPoint oldPoint, min, max;
-    CGFloat newX, newY;
-    
-    min = [self minContainerOffset];
-    max = [self maxContainerOffset];
-    
-    oldPoint = container.position;
-    newX     = MIN(offset.x, max.x);
-    newX     = MAX(newX, min.x);
-    newY     = MIN(offset.y, max.y);
-    newY     = MAX(newY, min.y);
+  CGPoint oldPoint, min, max;
+  CGFloat newX, newY;
 
-    if (newY == oldPoint.y && newX == oldPoint.x)
-        return;
+  min = [self minContainerOffsetWithOvershot:CGPointZero];
+  max = [self maxContainerOffsetWithOvershot:CGPointZero];
 
-    if (animated)	//animate scrolling
-	{
-		[container runAction:
-		 [CCSequence actions:
-		  [CCEaseSineInOut actionWithAction:[CCMoveTo actionWithDuration:BOUNCE_DURATION position:CGPointMake(newX, newY)]],
-		  [CCCallBlock actionWithBlock:^{
-			 [self unschedule:@selector(performedAnimatedScroll:)];
-			 
-			 if(decelerating)
-			 {
-				 decelerating = NO;
-				 
-				 if(delegate != nil
-					&& [delegate respondsToSelector:@selector(scrollLayerDidEndDecelerating:)])
-					 [delegate scrollLayerDidEndDecelerating:self];
-			 }
-			 else
-			 {
-				 if(delegate != nil
-					&& [delegate respondsToSelector:@selector(scrollLayerDidEndScrollingAnimation:)])
-					 [delegate scrollLayerDidEndScrollingAnimation:self];
-			 }
-		 }],
-		  nil]];
-    }
-	else			//set the container position directly
-	{
-        container.position = CGPointMake(newX, newY);
-        [self scrollLayerDidScroll];
-    }
+  oldPoint = container.position;
+  newX     = MIN(offset.x, max.x);
+  newX     = MAX(newX, min.x);
+  newY     = MIN(offset.y, max.y);
+  newY     = MAX(newY, min.y);
+  
+  CGPoint pos = ccp(newX, newY);
+  
+  if(animated){
+    float duration = 0;
+    if(direction == CCScrollLayerDirectionHorizontal)
+      duration = fabsf(newX - oldPoint.x) / SCROLL_MAX_VELOCITY;
+    else
+      duration = fabsf(newY - oldPoint.y) / SCROLL_MAX_VELOCITY;
+    
+    isAnimating = YES;
+    [container stopAllActions];
+    [container runAction:[CCSequence actions:
+                          [CCEaseOut actionWithAction:
+                           [CCMoveTo actionWithDuration:duration position:pos]
+                          rate:1.0]
+                          ,
+                          [CCCallFunc actionWithTarget:self selector:@selector(stoppedDecelerating:)],
+                          nil]];
+  }else{
+    container.position = pos;
+    [self stoppedDecelerating:nil];
+  }
 }
 
 
@@ -360,18 +470,17 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 
 	if(animated)
 	{
-		if(zoomBouncing == NO
-		   && delegate != nil
-		   && [delegate respondsToSelector:@selector(scrollLayerDidEndZooming:atScale:)])
+    isAnimating = YES;
+    
+		if(zoomBouncing == NO && [delegate respondsToSelector:@selector(scrollLayerDidEndZooming:atScale:)])
 			[delegate scrollLayerDidEndZooming:self atScale:zoom];
 
+    [container stopAllActions];
 		[container runAction:
 		 [CCSequence actions:
 		  [CCEaseSineInOut actionWithAction:[CCScaleTo actionWithDuration:BOUNCE_DURATION scale:zoom]],
 		  [CCCallBlock actionWithBlock:^{ 
-			 if(zoomBouncing
-				&& delegate != nil
-				&& [delegate respondsToSelector:@selector(scrollLayerDidEndZooming:atScale:)])
+			 if(zoomBouncing && [delegate respondsToSelector:@selector(scrollLayerDidEndZooming:atScale:)])
 				 [delegate scrollLayerDidEndZooming:self atScale:zoom];
 
 			 zoomBouncing = NO;
@@ -395,15 +504,22 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 
 - (void)handlePanGesture:(UIPanGestureRecognizer *)gestureRecognizer
 {
+  NSTimeInterval now    = CFAbsoluteTimeGetCurrent();
+  CGPoint newPoint      = [[CCDirector sharedDirector] convertToGL:[gestureRecognizer locationInView:[CCDirector sharedDirector].view]];
+  
 	switch(gestureRecognizer.state)
 	{
 		case UIGestureRecognizerStateBegan:
 		{
-			lastGesturePoint = [gestureRecognizer locationInView:gestureRecognizer.view];
-			scrollDistance = ccp(0.0f, 0.0f);
+      lastGestureTime       = now;
+			lastGesturePoint      = newPoint;
+      totalGestureTime      = 0;
+      totalGestureDistance  = CGPointZero;
+      scrollVelocity        = CGPointZero;
+      isAnimating           = NO;
+      [container stopAllActions];
 			
-			if(delegate != nil
-			   && [delegate respondsToSelector:@selector(scrollLayerWillBeginDragging:)])
+			if([delegate respondsToSelector:@selector(scrollLayerWillBeginDragging:)])
 				[delegate scrollLayerWillBeginDragging:self];
 			
 			break;
@@ -411,50 +527,42 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 			
 		case UIGestureRecognizerStateChanged:
 		{
-			CGPoint newPoint = [gestureRecognizer locationInView:gestureRecognizer.view];
-			CGPoint moveDistance = ccpSub(newPoint, lastGesturePoint);
-			lastGesturePoint = newPoint;
+      NSTimeInterval timeDiff = now - lastGestureTime;
+      lastGestureTime         = now;
 			
-			moveDistance.y *= -1;
-            CGPoint tempPosition = ccpAdd(container.position, moveDistance);
-            
-            CGPoint maxInset = [self maxContainerOffset];
-            CGPoint minInset = [self minContainerOffset];
-            
-			if(tempPosition.x < minInset.x
-			   || tempPosition.x >= maxInset.x)
-				moveDistance.x = (bounces && (self.contentSize.width > viewSize.width || alwaysBounceHorizontal)) ? moveDistance.x * 0.25f : 0.0f;
-			if(tempPosition.y < minInset.y
-			   || tempPosition.y >= maxInset.y)
-				moveDistance.y = (bounces && (self.contentSize.width > viewSize.width || alwaysBounceVertical)) ? moveDistance.y * 0.25f : 0.0f;
+			CGPoint moveDistance    = ccpSub(newPoint, lastGesturePoint);
+      lastGesturePoint        = newPoint;
 			
-			container.position = ccpAdd(container.position, moveDistance);
-			scrollDistance = moveDistance;
-			
-			[self scrollLayerDidScroll];
+      if(direction == CCScrollLayerDirectionHorizontal)
+        moveDistance.y = 0;
+      if(direction == CCScrollLayerDirectionVertical)
+        moveDistance.x = 0;
+      
+      totalGestureTime        += timeDiff;
+      totalGestureDistance    = ccpAdd(totalGestureDistance, moveDistance);
+      
+      scrollVelocity          = ccpMult(totalGestureDistance, 1.0/totalGestureTime);
+      
+      CGPoint newPos          = ccpAdd(container.position, moveDistance);
+      
+      CGPoint overshot        = (bounces)?ccp(OVERSHOOT_DISTANCE, OVERSHOOT_DISTANCE):CGPointZero;
+      CGPoint clampPos        = [self clampedPosition:newPos withOvershot:overshot];
+      
+      container.position      = clampPos;
+      
+      [self scrollLayerDidScroll];
 			
 			break;
 		}
 			
 		default:
 		{
-			BOOL willDecelerate = NO;
-			if(ccpLengthSQ(scrollDistance) >= SCROLL_DECEL_DIST * SCROLL_DECEL_DIST)
-			{
-				[self schedule:@selector(decelerateScrolling:)];
-				willDecelerate = YES;
-				
-				if(delegate != nil
-				   && [delegate respondsToSelector:@selector(scrollLayerWillBeginDecelerating:)])
-					[delegate scrollLayerWillBeginDecelerating:self];
-			}
-			else
-			{
-				[self setContentOffset:container.position animated:YES];
-			}
+      decelerating            = YES;
+      
+      if([delegate respondsToSelector:@selector(scrollLayerWillBeginDecelerating:)])
+        [delegate scrollLayerWillBeginDecelerating:self];
 			
-			if(delegate != nil
-			   && [delegate respondsToSelector:@selector(scrollLayerDidEndDragging:willDecelerate::)])
+			if([delegate respondsToSelector:@selector(scrollLayerDidEndDragging:willDecelerate:)])
 				[delegate scrollLayerDidEndDragging:self willDecelerate:YES];
 			
 			break;
@@ -471,8 +579,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 		{
 			gestureRecognizer.scale = container.scale;
 			
-			if(delegate != nil
-			   && [delegate respondsToSelector:@selector(scrollLayerWillBeginZooming:)])
+			if([delegate respondsToSelector:@selector(scrollLayerWillBeginZooming:)])
 				[delegate scrollLayerWillBeginZooming:self];
 			
 			break;
@@ -491,7 +598,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 				zoomDistance = (bouncesZoom) ? minimumZoom - ((minimumZoom - gestureRecognizer.scale) * 0.25f) : minimumZoom;
 			}
 			
-			lastGesturePoint = [container convertToNodeSpace:[[CCDirector sharedDirector] convertToGL:[gestureRecognizer locationInView:gestureRecognizer.view]]];
+			lastGesturePoint = [container convertToNodeSpace:[[CCDirector sharedDirector] convertToGL:[gestureRecognizer locationInView:[CCDirector sharedDirector].view]]];
 			CGSize oldSize = [self contentSize];
 			
 			container.scale = zoomDistance;
@@ -501,8 +608,7 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 			CGPoint pointPercent = CGPointMake(lastGesturePoint.x / container.contentSize.width, lastGesturePoint.y / container.contentSize.height);
 			container.position = ccpAdd(container.position, CGPointMake(deltaSize.width * pointPercent.x, deltaSize.height * pointPercent.y));
 			
-			if(delegate != nil
-			   && [delegate respondsToSelector:@selector(scrollLayerDidZoom:)])
+			if([delegate respondsToSelector:@selector(scrollLayerDidZoom:)])
 				[delegate scrollLayerDidZoom:self];
 			
 			break;
@@ -516,6 +622,38 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
 			break;
 		}
 	}
+}
+
+#pragma mark - Gesture delegate
+
+// called when a gesture recognizer attempts to transition out of UIGestureRecognizerStatePossible. returning NO causes it to transition to UIGestureRecognizerStateFailed
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer
+{
+  if([delegate respondsToSelector:@selector(gestureRecognizerShouldBegin:)])
+    return [delegate gestureRecognizerShouldBegin:gestureRecognizer];
+  
+  return YES;
+}
+
+// called when the recognition of one of gestureRecognizer or otherGestureRecognizer would be blocked by the other
+// return YES to allow both to recognize simultaneously. the default implementation returns NO (by default no two gestures can be recognized simultaneously)
+//
+// note: returning YES is guaranteed to allow simultaneous recognition. returning NO is not guaranteed to prevent simultaneous recognition, as the other gesture's delegate may return YES
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer
+{
+  if([delegate respondsToSelector:@selector(gestureRecognizer:shouldRecognizeSimultaneouslyWithGestureRecognizer:)])
+    return [delegate gestureRecognizer:gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:otherGestureRecognizer];
+  
+  return NO;
+}
+
+// called before touchesBegan:withEvent: is called on the gesture recognizer for a new touch. return NO to prevent the gesture recognizer from seeing this touch
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch
+{
+  if([delegate respondsToSelector:@selector(gestureRecognizer:shouldReceiveTouch:)])
+    return [delegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
+  
+  return NO;
 }
 
 
@@ -532,102 +670,24 @@ const float CCScrollLayerDecelerationRateFast = 0.85f;
     container.contentSize = size;
 }
 
-
+// Make sure all children go to the container.
 - (void)addChild:(CCNode *)node  z:(int)z tag:(int)aTag
 {
-	// Make sure all children go to the container.
-    node.isRelativeAnchorPoint = YES;
-    node.anchorPoint = ccp(0.0f, 0.0f);
-	
-    if(container != node)
-	{
-        [container addChild:node z:z tag:aTag];
-    }
-	else
-	{
-        [super addChild:node z:z tag:aTag];
-    }
+  if(node == container){
+    [super addChild:node z:z tag:aTag];
+    return;
+  }
+  
+  //TODO: is this necessary?
+  node.ignoreAnchorPointForPosition = NO;
+  node.anchorPoint = ccp(0.0f, 0.0f);
+
+  [container addChild:node z:z tag:aTag];
 }
 
-
-- (void)beforeDraw
+-(CCNode*) getChildByTag:(NSInteger) aTag
 {
-    if(clipToBounds)
-	{
-		// Clip this view so that outside of the visible bounds can be hidden.
-        GLfloat planeTop[]    = {0.0f, -1.0f, 0.0f, viewSize.height};
-        GLfloat planeBottom[] = {0.0f, 1.0f, 0.0f, 0.0f};
-        GLfloat planeLeft[]   = {1.0f, 0.0f, 0.0f, 0.0f};
-        GLfloat planeRight[]  = {-1.0f, 0.0f, 0.0f, viewSize.width};
-        
-        glClipPlanef(GL_CLIP_PLANE0, planeTop);
-        glClipPlanef(GL_CLIP_PLANE1, planeBottom);
-        glClipPlanef(GL_CLIP_PLANE2, planeLeft);
-        glClipPlanef(GL_CLIP_PLANE3, planeRight);
-        glEnable(GL_CLIP_PLANE0);
-        glEnable(GL_CLIP_PLANE1);
-        glEnable(GL_CLIP_PLANE2);
-        glEnable(GL_CLIP_PLANE3);
-    }
+	return [container getChildByTag:aTag];
 }
-
-
-- (void)afterDraw
-{
-    if(clipToBounds)
-	{
-		// Retract what's done in beforeDraw so that there's no side effect to other nodes.
-        glDisable(GL_CLIP_PLANE0);
-        glDisable(GL_CLIP_PLANE1);
-        glDisable(GL_CLIP_PLANE2);
-        glDisable(GL_CLIP_PLANE3);
-    }
-}
-
-
-// Override for the base CCNode visit method.
-- (void)visit
-{
-	if(!visible_)
-		return;
-	
-	glPushMatrix();
-	
-	if(grid_
-	   && grid_.active)
-	{
-		[grid_ beforeDraw];
-		[self transformAncestors];
-	}
-	
-	[self transform];
-	
-	[self beforeDraw];
-	
-	for(CCNode *child in children_)
-	{
-		if(child.zOrder < 0)
-			[child visit];
-		else
-			break;
-	}
-	
-	[self draw];
-	
-	for(CCNode * child in children_)
-	{
-		if(child.zOrder >= 0)
-			[child visit];
-	}
-	
-	[self afterDraw];
-	
-	if(grid_
-	   && grid_.active)
-		[grid_ afterDraw:self];
-	
-	glPopMatrix();
-}
-
 
 @end

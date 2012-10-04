@@ -34,7 +34,7 @@
 #pragma mark - Properties
 
 // The content of the table layer cell.
-@property (nonatomic, strong) CCNode *node;
+@property (nonatomic, retain) CCNode *node;
 
 // The index of the cell.
 @property (nonatomic, assign) NSUInteger idx;

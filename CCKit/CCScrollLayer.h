@@ -7,6 +7,8 @@
 //
 //  Portions created by Sangwoo Im.
 //
+//  Modified by CJ Hanson @ Hanson Interactive.
+//
 //	Permission is hereby granted, free of charge, to any person obtaining a copy
 //	of this software and associated documentation files (the "Software"), to deal
 //	in the Software without restriction, including without limitation the rights
@@ -27,7 +29,6 @@
 //
 
 #import "cocos2d.h"
-#import "CCGestureRecognizer.h"
 
 
 @class CCScrollLayer;
@@ -51,7 +52,7 @@ extern const float CCScrollLayerDecelerationRateFast;
 
 
 // A protocol that delegates can conform to to respond to scroll layer events.
-@protocol CCScrollLayerDelegate <NSObject>
+@protocol CCScrollLayerDelegate <UIGestureRecognizerDelegate, NSObject>
 
 @optional
 
@@ -93,13 +94,6 @@ extern const float CCScrollLayerDecelerationRateFast;
 // Called when the scroll layer is being zoomed by the user.
 - (void)scrollLayerDidZoom:(CCScrollLayer *)layer;
 
-
-#pragma mark - Responding to scrolling animations
-
-// Called when setContentOffset:animated: with YES passed to the animated parameter has finished.
-- (void)scrollLayerDidEndScrollingAnimation:(CCScrollLayer *)layer;
-
-
 @end
 
 
@@ -107,7 +101,7 @@ extern const float CCScrollLayerDecelerationRateFast;
 
 
 // The main scroll layer interface.
-@interface CCScrollLayer : CCLayer
+@interface CCScrollLayer : CCLayer <UIGestureRecognizerDelegate>
 
 #pragma mark - Creating a scroll layer
 
@@ -144,7 +138,7 @@ extern const float CCScrollLayerDecelerationRateFast;
 // TODO: @property (nonatomic, assign) BOOL scrollsToTop
 
 // Scrolls the layer so that the rectangle specified is visible (if possible).
-- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)aniamted;
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated;
 
 // TODO: @property (nonatomic, assign) BOOL pagingEnabled
 
@@ -169,10 +163,7 @@ extern const float CCScrollLayerDecelerationRateFast;
 // The direction the scroll layer is allowed to scroll. CCScrollViewDirectionBoth by default.
 @property (nonatomic, assign) CCScrollLayerDirection direction;
 
-
-#pragma mark - Managing the scroll indicator
-
-// TODO: All of this.
+@property (nonatomic, assign) BOOL pagingEnabled;
 
 
 #pragma mark - Zooming and panning
@@ -206,15 +197,12 @@ extern const float CCScrollLayerDecelerationRateFast;
 // Determines whether the scroll layer bounces during zooming when it reaches its minimum or maximum bounds.
 @property (nonatomic, assign) BOOL bouncesZoom;
 
+@property (nonatomic, assign) int currentPage;
+@property (nonatomic, readonly) int pageCount;
 
 #pragma mark - Managing the delegate
 
-// The delegate of the scroll layer object.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
-@property (nonatomic, weak) id<CCScrollLayerDelegate> delegate;
-#else
 @property (nonatomic, assign) id<CCScrollLayerDelegate> delegate;
-#endif
 
 
 @end

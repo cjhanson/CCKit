@@ -90,11 +90,7 @@ extern const float CCNavigationControllerAnimationDurationDefault;
 #pragma mark - Accessing the delegate
 
 // A delegate which allows objects to respond to navigation controller events.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
-@property (nonatomic, weak) id<CCNavigationControllerDelegate> delegate;
-#else
 @property (nonatomic, assign) id<CCNavigationControllerDelegate> delegate;
-#endif
 
 
 @end

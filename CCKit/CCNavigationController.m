@@ -51,7 +51,7 @@ typedef enum
 		
 		outgoingTex.anchorPoint = outgoingNode.anchorPoint;
 		outgoingTex.position = outgoingNode.position;
-		outgoingTex.sprite.positionInPixels = outgoingNode.anchorPointInPixels;
+		outgoingTex.sprite.position = outgoingNode.anchorPointInPoints;
 		[outgoingTex.sprite setOpacityModifyRGB:YES];
 		outgoingTex.sprite.opacity = 255;
 		
@@ -78,7 +78,7 @@ typedef enum
 	
 	incomingTex.anchorPoint = incomingNode.anchorPoint;
 	incomingTex.position = incomingInitialPosition;
-	incomingTex.sprite.positionInPixels = incomingNode.anchorPointInPixels;
+	incomingTex.sprite.position = incomingNode.anchorPointInPoints;
 	[incomingTex.sprite setOpacityModifyRGB:YES];
 	incomingTex.sprite.opacity = 0;
 	
@@ -195,6 +195,11 @@ typedef enum
 	}
 }
 
+- (void) dealloc
+{
+  [nodeStack release];
+  [super dealloc];
+}
 
 #pragma mark - Creating the navigation controller
 

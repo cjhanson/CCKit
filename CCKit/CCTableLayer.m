@@ -29,12 +29,6 @@
 #import "CCTableLayer.h"
 #import "CCTableLayerCell.h"
 
-
-#if __has_feature(objc_arc) == 0
-#warning This code was designed to run under ARC. Without it, you will experience lots of memory leaks.
-#endif
-
-
 @interface CCScrollLayer ()
 
 @property (nonatomic, strong) CCLayer *container;
@@ -56,6 +50,13 @@
 @synthesize delegate;
 @synthesize dataSource;
 
+
+- (void) dealloc
+{
+  [cellsUsed release];
+  [cellsFreed release];
+  [super dealloc];
+}
 
 #pragma mark - Private
 
@@ -309,7 +310,7 @@
     table = [[CCTableLayer alloc] initWithViewSize:size];
     table.dataSource = dataSource;
     [table updateContentSize];
-    return table;
+    return [table autorelease];
 }
 
 
@@ -324,8 +325,8 @@
 {
     if ((self = [super initWithViewSize:size]))
 	{
-        cellsUsed      = [NSMutableArray new];
-        cellsFreed     = [NSMutableArray new];
+        cellsUsed      = [[NSMutableArray alloc] initWithCapacity:3];
+        cellsFreed     = [[NSMutableArray alloc] initWithCapacity:3];
         self.direction  = CCScrollLayerDirectionVertical;
     }
 	
@@ -354,7 +355,8 @@
 		cell.idx            = NSNotFound;
 		cell.node.visible   = NO;
 	}
-	cellsUsed = [NSMutableArray new];
+  [cellsUsed release];
+	cellsUsed = [[NSMutableArray alloc] initWithCapacity:3];
 	
 	if ([dataSource numberOfCellsInTableLayer:self] > 0)
 		[self scrollLayerDidScroll];
@@ -402,7 +404,7 @@
 	//Pushing existing cells down.
 	for(CCTableLayerCell *tCell in movingCells)
 	{
-		newIdx = cell.idx + 1;
+		newIdx = tCell.idx + 1;
 		[self setIndex:newIdx forCell:tCell];
 	}
 	

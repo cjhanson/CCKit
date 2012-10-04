@@ -28,12 +28,6 @@
 
 #import "CCTableLayerCell.h"
 
-
-#if __has_feature(objc_arc) == 0
-#warning This code was designed to run under ARC. Without it, you will experience lots of memory leaks.
-#endif
-
-
 @implementation CCTableLayerCell
 
 @synthesize idx;
@@ -45,5 +39,11 @@
     return CGSizeZero;
 }
 
+
+- (void) dealloc
+{
+  [node release];
+  [super dealloc];
+}
 
 @end

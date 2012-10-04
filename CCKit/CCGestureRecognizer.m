@@ -30,19 +30,9 @@
 
 #import <objc/runtime.h>
 
-
-#if __has_feature(objc_arc) == 0
-#warning This code was designed to run under ARC. Without it, you will experience lots of memory leaks.
-#endif
-
-
 @interface CCGestureRecognizer ()
 
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
-@property (nonatomic, weak) CCNode *node;
-#else
 @property (nonatomic, assign) CCNode *node;
-#endif
 
 @end
 
@@ -52,20 +42,13 @@
 
 @implementation CCGestureRecognizer
 {
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_5_0
-	__weak id<UIGestureRecognizerDelegate> delegate;
-	__weak id target;
-#else
-	__unsafe_unretained id<UIGestureRecognizerDelegate> delegate;
-	__unsafe_unretained id target;
-#endif
-	
+  id<UIGestureRecognizerDelegate> delegate;
+  id target;
 	SEL callback;
 }
 
 @synthesize gestureRecognizer;
 @synthesize node;
-
 
 #pragma mark - Private
 
@@ -80,7 +63,7 @@
 
 + (id)recognizerWithRecognizer:(UIGestureRecognizer*)recognizer target:(id)target action:(SEL)action;
 {
-	return [[self alloc] initWithRecognizer:recognizer target:target action:action];
+	return [[[self alloc] initWithRecognizer:recognizer target:target action:action] autorelease];
 }
 
 
@@ -90,7 +73,7 @@
 	{
 		NSAssert(recognizer != nil, @"Parameter recognizer cannot be nil!");
 		  
-		gestureRecognizer = recognizer;
+		gestureRecognizer = [recognizer retain];
 		[gestureRecognizer addTarget:self action:@selector(callback:)];
 
 		delegate = gestureRecognizer.delegate;
@@ -109,8 +92,11 @@
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch
 {
 	NSAssert(node != nil, @"Gesture recognizer must have a node.");
+  
+  if([delegate respondsToSelector:@selector(gestureRecognizer:shouldReceiveTouch:)])
+		return [delegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
 
-	CGPoint pt = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[touch view]]];
+	CGPoint pt = [[CCDirector sharedDirector] convertToGL:[touch locationInView:[[CCDirector sharedDirector] view]]];
 	BOOL rslt = [node isPointInArea:pt];
 
 	if( rslt )
@@ -142,19 +128,13 @@
 		}    
 	}
 
-	if(rslt
-	   && delegate
-	   && [delegate respondsToSelector:@selector(gestureRecognizer:shouldReceiveTouch:)])
-		rslt = [delegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
-
 	return rslt;
 }
 
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer
 {
-	if(delegate
-	   && [delegate respondsToSelector:@selector(gestureRecognizer:shouldRecognizeSimultaneouslyWithGestureRecognizer:)])
+	if([delegate respondsToSelector:@selector(gestureRecognizer:shouldRecognizeSimultaneouslyWithGestureRecognizer:)])
 		return [delegate gestureRecognizer:gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:otherGestureRecognizer];
 	
 	return YES;
@@ -163,8 +143,7 @@
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer
 {
-	if(delegate
-	   && [delegate respondsToSelector:@selector(gestureRecognizerShouldBegin:)])
+	if([delegate respondsToSelector:@selector(gestureRecognizerShouldBegin:)])
 		return [delegate gestureRecognizerShouldBegin:gestureRecognizer];
 	
 	return YES;
@@ -175,7 +154,10 @@
 
 - (void)dealloc
 {
-	[[[CCDirector sharedDirector] openGLView] removeGestureRecognizer:gestureRecognizer];
+	[[CCDirector sharedDirector].view removeGestureRecognizer:gestureRecognizer];
+  [gestureRecognizer release];
+  
+  [super dealloc];
 }
 
 
@@ -184,50 +166,7 @@
 
 #pragma mark -
 
-
-static char CCNodeGestureRecognizerAdditionsKey;
-
-
 @implementation CCNode (GestureRecognizerAdditions)
-
-- (NSArray *)gestureRecognizers
-{
-	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
-	return [NSArray arrayWithArray:gestureRecognizers];
-}
-
-
-- (void)addGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer
-{
-	gestureRecognizer.node = self;
-	
-	// Since we can't add ivars to categories, we'll use Objective-C's fancy pants associated object feature
-	// which allows us to retain a mutable array of gesture recognizer objects to a CCNode and make sure they
-	// are deallocated when the node is deallocated. Magic!
-	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
-	if(gestureRecognizers == nil)
-	{
-		gestureRecognizers = [[NSMutableArray alloc] init];
-		objc_setAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey, gestureRecognizers, OBJC_ASSOCIATION_RETAIN);
-	}
-	[gestureRecognizers addObject:gestureRecognizer];
-	
-	[[[CCDirector sharedDirector] openGLView] addGestureRecognizer:gestureRecognizer.gestureRecognizer];
-}
-
-
-- (void)removeGestureRecognizer:(CCGestureRecognizer *)gestureRecognizer
-{
-	// Removal of the gesture recognizer from the mutable array created above.
-	NSMutableArray *gestureRecognizers = objc_getAssociatedObject(self, &CCNodeGestureRecognizerAdditionsKey);
-	[gestureRecognizers removeObject:gestureRecognizer];
-	
-	if(gestureRecognizer.node == self)
-		[[[CCDirector sharedDirector] openGLView] removeGestureRecognizer:gestureRecognizer.gestureRecognizer]; 
-
-	gestureRecognizer.node = nil;
-}
-
 
 - (BOOL)isPointInArea:(CGPoint)pt
 {
